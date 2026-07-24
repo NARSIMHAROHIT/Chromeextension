@@ -1,6 +1,6 @@
 const TEXT_FIELDS = [
-  "firstName", "lastName", "email", "phone", "city",
-  "postalCode", "linkedin", "currentCompany", "currentTitle",
+  "firstName", "lastName", "email", "phone", "addressLine1", "city", "state",
+  "postalCode", "country", "phoneType", "linkedin", "currentCompany", "currentTitle",
   // Common questions — stored as plain strings, matched to dropdowns/radios on the page
   "workAuth", "sponsorship", "over18", "relocate", "howHeard", "startDate",
   "gender", "ethnicity", "veteran", "disability", "whyInterested",
@@ -71,6 +71,27 @@ $("fill").addEventListener("click", async () => {
     );
   } catch (e) {
     status("Couldn't fill this page. Make sure the application form is visible, then try again. (Chrome system pages can't be filled.)");
+  }
+});
+
+// ---- Scan: show which fields on the page are detected / unmatched ----
+document.getElementById("scan").addEventListener("click", async () => {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  status("Scanning…");
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId: tab.id, allFrames: true },
+      files: ["content.js"],
+    });
+    const seen = await chrome.tabs.sendMessage(tab.id, { type: "SCAN" });
+    const out = document.getElementById("scanOut");
+    out.style.display = "block";
+    out.textContent = (seen || [])
+      .map((f) => `${f.matched ? "✓ " + f.matched : "✗ (no match)"} — ${f.label.slice(0, 80)}`)
+      .join("\n") || "No fields found — is the form visible on this page?";
+    status(`Scanned: ${(seen || []).filter((f) => f.matched).length} matched, ${(seen || []).filter((f) => !f.matched).length} unmatched`);
+  } catch (e) {
+    status("Couldn't scan this page.");
   }
 });
 

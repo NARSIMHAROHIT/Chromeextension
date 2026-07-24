@@ -64,10 +64,17 @@ const FIELD_RULES = [
   { key: "firstName",  re: /first\s*name|given\s*name|firstname/i },
   { key: "lastName",   re: /last\s*name|family\s*name|surname|lastname/i },
   { key: "email",      re: /e-?mail/i },
+  // Order matters: specific phone rules BEFORE the generic one, or
+  // "Country Phone Code" / "Phone Device Type" would match as phone number.
+  { key: "phoneType",  re: /phone\s*(device\s*)?type|device\s*type/i },
+  { key: "phoneCountryCode", re: /country\s*phone\s*code|phone\s*country\s*code|dial(ing)?\s*code/i },
   { key: "phone",      re: /phone|mobile|cell/i },
-  { key: "addressLine1", re: /address\s*line\s*1|street|addressLine1/i },
+  { key: "addressLine1", re: /address\s*line\s*1|street|addressLine1|^\s*address\s*\*?\s*$/i },
+  { key: "addressLine2", re: /address\s*line\s*2|apt|suite|unit/i },
   { key: "city",       re: /\bcity\b|town/i },
+  { key: "state",      re: /\bstate\b|province|region/i },
   { key: "postalCode", re: /zip|postal/i },
+  { key: "country",    re: /country/i },
   { key: "linkedin",   re: /linkedin/i },
   { key: "github",     re: /github/i },
   { key: "website",    re: /website|portfolio|personal\s*site|\burl\b/i },
@@ -476,10 +483,16 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     return true; // keep the message channel open for the async response
   }
   if (msg.type === "SCAN") {
-    // Return what fields we can see, useful for debugging matching rules
-    const seen = [...document.querySelectorAll("input, textarea")]
-      .filter((i) => i.offsetParent !== null)
-      .map((i) => ({ label: getFieldLabel(i), matched: matchProfileKey(getFieldLabel(i)) }));
+    // Return every visible field + whether we can match it. Debug aid.
+    const els = [...document.querySelectorAll(
+      'input, textarea, select, button[aria-haspopup="listbox"]'
+    )].filter((el) => el.offsetParent !== null);
+    const seen = els
+      .map((el) => {
+        const label = getFieldLabel(el);
+        return { label, matched: matchAnswerKey(label) || matchProfileKey(label) };
+      })
+      .filter((x) => x.label);
     sendResponse(seen);
   }
 });
