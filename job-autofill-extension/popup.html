@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    :root {
+      --bg: #ffffff; --ink: #1a1a2e; --line: #e4e4ef;
+      --accent: #16a34a; --accent-ink: #ffffff; --muted: #6b7280;
+    }
+    * { box-sizing: border-box; margin: 0; }
+    body {
+      width: 340px; font: 13px/1.45 system-ui, sans-serif;
+      color: var(--ink); background: var(--bg); padding: 14px;
+    }
+    h1 { font-size: 15px; margin-bottom: 10px; }
+    label { display: block; font-size: 11px; color: var(--muted); margin: 8px 0 2px; }
+    input, textarea {
+      width: 100%; padding: 6px 8px; border: 1px solid var(--line);
+      border-radius: 6px; font: inherit;
+    }
+    textarea { resize: vertical; min-height: 44px; }
+    .sel {
+      width: 100%; padding: 6px 8px; border: 1px solid var(--line);
+      border-radius: 6px; font: inherit; background: #fff;
+    }
+    .row { display: flex; gap: 8px; }
+    .row > div { flex: 1; }
+    button {
+      width: 100%; margin-top: 12px; padding: 9px; border: 0; border-radius: 8px;
+      font: inherit; font-weight: 600; cursor: pointer;
+    }
+    #save { background: #eef2ff; color: #3730a3; }
+    #fill { background: var(--accent); color: var(--accent-ink); }
+    #status { margin-top: 8px; font-size: 12px; color: var(--muted); min-height: 16px; }
+    .file-note { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  </style>
+</head>
+<body>
+  <h1>Job Autofill</h1>
+
+  <div class="row">
+    <div><label>First name</label><input id="firstName" /></div>
+    <div><label>Last name</label><input id="lastName" /></div>
+  </div>
+  <label>Email</label><input id="email" type="email" />
+  <label>Phone</label><input id="phone" type="tel" />
+  <div class="row">
+    <div><label>City</label><input id="city" /></div>
+    <div><label>Postal code</label><input id="postalCode" /></div>
+  </div>
+  <label>LinkedIn URL</label><input id="linkedin" type="url" />
+  <label>Current company</label><input id="currentCompany" />
+  <label>Current title</label><input id="currentTitle" />
+  <label>Skills (comma-separated)</label>
+  <textarea id="skills" placeholder="Python, PyTorch, AWS, Docker"></textarea>
+  <label>Resume (PDF)</label>
+  <input id="resume" type="file" accept=".pdf,.doc,.docx" />
+  <div class="file-note" id="resumeNote"></div>
+
+  <details style="margin-top:12px">
+    <summary style="font-weight:600;cursor:pointer">Common Questions (answered once, used everywhere)</summary>
+    <label>Authorized to work in the US?</label>
+    <select id="workAuth" class="sel"><option value=""></option><option>Yes</option><option>No</option></select>
+    <label>Will you need visa sponsorship?</label>
+    <select id="sponsorship" class="sel"><option value=""></option><option>Yes</option><option>No</option></select>
+    <label>Are you at least 18?</label>
+    <select id="over18" class="sel"><option value=""></option><option>Yes</option><option>No</option></select>
+    <label>Willing to relocate?</label>
+    <select id="relocate" class="sel"><option value=""></option><option>Yes</option><option>No</option></select>
+    <label>How did you hear about us? (e.g. "LinkedIn", "Job board")</label>
+    <input id="howHeard" />
+    <label>Available start date / notice period</label>
+    <input id="startDate" placeholder="Immediately / 2 weeks" />
+    <label>Gender</label>
+    <input id="gender" placeholder="Male / Female / Decline to self identify" />
+    <label>Race / Ethnicity</label>
+    <input id="ethnicity" placeholder="e.g. Asian / Decline to self identify" />
+    <label>Veteran status</label>
+    <input id="veteran" placeholder="I am not a veteran / Decline" />
+    <label>Disability status</label>
+    <input id="disability" placeholder="No, I do not have a disability / Decline" />
+    <label>"Why are you interested?" template (optional — leave blank to let the LLM write it per job)</label>
+    <textarea id="whyInterested" placeholder="I'm excited about this role because..."></textarea>
+    <div class="file-note">Type answers exactly as they appear in the dropdowns (e.g. "Decline to self identify"). EEO questions are voluntary — leave any blank to skip them.</div>
+  </details>
+
+  <details style="margin-top:12px">
+    <summary style="font-weight:600;cursor:pointer">LLM Settings (for open-ended questions)</summary>
+    <label>Provider</label>
+    <select id="llmProvider" style="width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:6px;font:inherit">
+      <option value="">Disabled</option>
+      <option value="anthropic">Anthropic (Claude)</option>
+      <option value="openai">OpenAI</option>
+      <option value="groq">Groq (fast, free tier)</option>
+      <option value="ollama">Ollama (local, free)</option>
+    </select>
+    <label>API key <span style="font-weight:400">(not needed for Ollama)</span></label>
+    <input id="llmKey" type="password" placeholder="sk-..." />
+    <label>Model (optional)</label>
+    <input id="llmModel" placeholder="e.g. llama-3.3-70b-versatile (Groq)" />
+    <div class="file-note">Your key is stored only in this browser (chrome.storage.local) and sent only to the provider you pick.</div>
+  </details>
+
+  <button id="save">Save profile</button>
+  <button id="fill">Autofill this page</button>
+  <div id="status"></div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
