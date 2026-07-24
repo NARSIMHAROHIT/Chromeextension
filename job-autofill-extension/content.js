@@ -1,5 +1,11 @@
 // content.js — runs on job application pages.
 // Listens for an "AUTOFILL" message from the popup, then fills the form.
+// Injected two ways: automatically on known ATS domains (manifest), and
+// on-demand into ANY page via the popup (chrome.scripting). The guard below
+// prevents double-registration if both happen.
+(function () {
+  if (window.__jobAutofillInjected) return;
+  window.__jobAutofillInjected = true;
 
 // ---------------------------------------------------------------------------
 // 1. React-safe value setting
@@ -206,13 +212,103 @@ function fillRadioQuestions(profile) {
     for (const radio of radios) {
       const optLabel = (getFieldLabel(radio) || radio.value || "").toLowerCase();
       if (optLabel.includes(want) || want.includes(optLabel)) {
-        radio.click();
-        radio.dispatchEvent(new Event("change", { bubbles: true }));
+        chooseOption(radio);
         filled++;
         break;
       }
     }
   }
+  return filled;
+}
+
+// ---------------------------------------------------------------------------
+// 6c. Federal self-ID forms (CC-305 disability, veteran status) + their
+// Name/Date fields. These are special:
+//  - Options are long sentences ("No, I do not have a disability and have
+//    not had one in the past"), so we categorize both the option and your
+//    saved answer as yes / no / decline and match categories.
+//  - Workday hides the native checkbox inputs behind styled widgets, so we
+//    click the associated label when the input itself isn't visible.
+// ---------------------------------------------------------------------------
+function categorizeAnswer(text) {
+  const t = text.toLowerCase().trim();
+  if (/^yes\b/.test(t)) return "yes";
+  if (/^no\b/.test(t)) return "no";
+  if (/(do\s*n[o']t|not|prefer not|decline).*(answer|say|identify|disclose)|^decline/.test(t)) return "decline";
+  return null;
+}
+
+function chooseOption(input) {
+  // Native input may be visually hidden; click its label instead.
+  if (input.offsetParent !== null) {
+    input.click();
+  } else {
+    const lbl = input.id && document.querySelector(`label[for="${CSS.escape(input.id)}"]`);
+    (lbl || input.closest("label") || input).click();
+  }
+  input.dispatchEvent(new Event("change", { bubbles: true }));
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
+function fillSelfIdChoices(profile) {
+  let filled = 0;
+  const targets = [
+    { saved: profile.disability, optionRe: /disabilit|do not want to answer/i },
+    { saved: profile.veteran,    optionRe: /veteran/i },
+  ];
+  for (const { saved, optionRe } of targets) {
+    if (!saved) continue;
+    const wantCat = categorizeAnswer(saved);
+    if (!wantCat) continue;
+
+    const boxes = document.querySelectorAll(
+      'input[type="checkbox"], input[type="radio"], [role="checkbox"], [role="radio"]'
+    );
+    for (const box of boxes) {
+      if (box.checked || box.getAttribute("aria-checked") === "true") continue;
+      const label = getFieldLabel(box);
+      if (!label || !optionRe.test(label)) continue;
+      if (categorizeAnswer(label) === wantCat) {
+        chooseOption(box);
+        filled++;
+        break; // only one option per form
+      }
+    }
+  }
+  return filled;
+}
+
+// The CC-305 form also asks for Name and today's Date.
+function fillSelfIdNameAndDate(profile) {
+  let filled = 0;
+  const now = new Date();
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  const dd = String(now.getDate()).padStart(2, "0");
+  const yyyy = String(now.getFullYear());
+
+  document.querySelectorAll("input").forEach((input) => {
+    if (input.value || input.type === "checkbox" || input.type === "radio") return;
+    const label = getFieldLabel(input).replace(/\*/g, "").trim().toLowerCase();
+    const aria = (input.getAttribute("aria-label") || "").toLowerCase();
+
+    // "Name" (full name) — exact-ish match only, to avoid First/Last fields
+    if ((label === "name" || label === "your name" || label === "full name")
+        && profile.firstName) {
+      setNativeValue(input, `${profile.firstName} ${profile.lastName || ""}`.trim());
+      filled++;
+      return;
+    }
+    // Workday splits dates into Month/Day/Year spinner inputs
+    if (aria === "month" || label === "month") { setNativeValue(input, mm); filled++; return; }
+    if (aria === "day"   || label === "day")   { setNativeValue(input, dd); filled++; return; }
+    if (aria === "year"  || label === "year")  { setNativeValue(input, yyyy); filled++; return; }
+    // Single date input with MM/DD/YYYY placeholder ("Date" / "Today's Date")
+    if ((label === "date" || label === "today's date" || /mm\/dd\/yyyy/i.test(input.placeholder || ""))
+        && !/birth|dob/i.test(label)) {
+      setNativeValue(input, `${mm}/${dd}/${yyyy}`);
+      filled++;
+    }
+  });
   return filled;
 }
 
@@ -353,7 +449,9 @@ async function runAutofill(profile, useLLM) {
   const results = { textFields: 0, resume: false, skills: false, llmAnswers: 0, choices: 0 };
 
   results.textFields = fillTextFields(profile);
+  results.textFields += fillSelfIdNameAndDate(profile);
   results.choices = fillRadioQuestions(profile);
+  results.choices += fillSelfIdChoices(profile);
   results.choices += fillNativeSelects(profile);
   results.choices += await fillDropdownQuestions(profile);
   results.choices += await fillComboboxes(profile);
@@ -385,3 +483,5 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     sendResponse(seen);
   }
 });
+
+})();

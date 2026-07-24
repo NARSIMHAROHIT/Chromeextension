@@ -54,6 +54,13 @@ $("fill").addEventListener("click", async () => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   status(useLLM ? "Filling (LLM answers may take a moment)…" : "Filling…");
   try {
+    // Inject into the current page (works on ANY career site thanks to
+    // activeTab — Honeywell/Oracle, iCIMS, SuccessFactors, custom portals...).
+    // The guard inside content.js makes re-injection harmless.
+    await chrome.scripting.executeScript({
+      target: { tabId: tab.id, allFrames: true },
+      files: ["content.js"],
+    });
     const result = await chrome.tabs.sendMessage(tab.id, { type: "AUTOFILL", profile, useLLM });
     status(
       `Filled ${result.textFields} fields` +
@@ -63,7 +70,7 @@ $("fill").addEventListener("click", async () => {
       (result.llmAnswers ? `, ${result.llmAnswers} AI answers (review the highlighted ones!)` : "") + "."
     );
   } catch (e) {
-    status("Couldn't reach this page — is it a supported job site?");
+    status("Couldn't fill this page. Make sure the application form is visible, then try again. (Chrome system pages can't be filled.)");
   }
 });
 
