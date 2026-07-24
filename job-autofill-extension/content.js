@@ -129,6 +129,68 @@ async function fillDropdownQuestions(profile) {
   return filled;
 }
 
+// Fill real <select> elements (Greenhouse and many other ATSs use these)
+function fillNativeSelects(profile) {
+  let filled = 0;
+  document.querySelectorAll("select").forEach((sel) => {
+    if (sel.offsetParent === null) return;
+    if (sel.selectedIndex > 0 && sel.value) return; // already answered
+    const label = getFieldLabel(sel);
+    const key = matchAnswerKey(label) || matchProfileKey(label);
+    if (!key || !profile[key]) return;
+
+    const want = profile[key].toLowerCase();
+    for (const opt of sel.options) {
+      const text = opt.textContent.trim().toLowerCase();
+      if (!text) continue;
+      if (text.includes(want) || want.includes(text)) {
+        sel.value = opt.value;
+        sel.dispatchEvent(new Event("change", { bubbles: true }));
+        sel.dispatchEvent(new Event("input", { bubbles: true }));
+        filled++;
+        break;
+      }
+    }
+  });
+  return filled;
+}
+
+// Fill searchable comboboxes (Greenhouse's new job-boards UI uses these:
+// an input with role="combobox" that opens a filtered option list).
+async function fillComboboxes(profile) {
+  let filled = 0;
+  const combos = document.querySelectorAll(
+    'input[role="combobox"], input[aria-autocomplete="list"]'
+  );
+  for (const input of combos) {
+    if (input.offsetParent === null || input.value) continue;
+    const label = getFieldLabel(input);
+    const key = matchAnswerKey(label) || matchProfileKey(label);
+    if (!key || !profile[key]) continue;
+
+    input.focus();
+    input.click();
+    setNativeValue(input, profile[key]);
+    await sleep(500); // wait for the filtered option list
+
+    const want = profile[key].toLowerCase();
+    const options = document.querySelectorAll('[role="option"], [id*="option"]');
+    let clicked = false;
+    for (const opt of options) {
+      const text = opt.textContent.trim().toLowerCase();
+      if (text.includes(want) || want.includes(text)) {
+        opt.click();
+        clicked = true;
+        break;
+      }
+    }
+    if (!clicked && options.length === 1) { options[0].click(); clicked = true; }
+    if (clicked) filled++;
+    await sleep(200);
+  }
+  return filled;
+}
+
 // Fill radio-button questions (Yes/No style, and EEO options)
 function fillRadioQuestions(profile) {
   let filled = 0;
@@ -292,7 +354,9 @@ async function runAutofill(profile, useLLM) {
 
   results.textFields = fillTextFields(profile);
   results.choices = fillRadioQuestions(profile);
+  results.choices += fillNativeSelects(profile);
   results.choices += await fillDropdownQuestions(profile);
+  results.choices += await fillComboboxes(profile);
 
   // Skills multiselect (Workday marks it with a searchbox role or automation id)
   const skillsInput =
